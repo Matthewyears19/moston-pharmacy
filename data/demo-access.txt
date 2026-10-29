@@ -1,0 +1,5 @@
+LOCAL DEMO ONLY
+http://127.0.0.1:4173/admin
+Email: matthew.years18@gmail.com
+Password: 474f4f2c4f7f14794cae3827
+Do not reuse these credentials on a public deployment.
