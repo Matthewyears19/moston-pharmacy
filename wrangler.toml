@@ -1,0 +1,20 @@
+name = "moston-pharmacy"
+main = "./build/worker.mjs"
+compatibility_date = "2026-10-21"
+workers_dev = true
+preview_urls = false
+# Preserve runtime variables configured in the dashboard on subsequent Git builds.
+keep_vars = true
+send_metrics = false
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+# Required: assets must never bypass the viewing-password gate.
+run_worker_first = true
+# Routes are explicitly resolved to HTML by edge/worker.js.
+html_handling = "none"
+not_found_handling = "none"
+
+# Runtime secrets belong in Worker Settings > Variables and Secrets.
+# Build with pnpm build before wrangler deploy. See HOSTING.md.

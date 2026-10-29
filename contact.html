@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contact Us – Moston Pharmacy</title>
+
+  <link rel="icon" href="assets/logo.png" />
+  <meta name="description" content="Get in touch with Moston Pharmacy for prescriptions, advice, and local services." />
+
+  <link rel="stylesheet" href="Stylesheet.css" />
+  <script defer src="Script.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- Header / Nav -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">
+        <img src="Logo header.png" alt="Moston Pharmacy logo" class="brand-logo" />
+      </a>
+
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <ul>
+          <li><a href="index.html#services">Services</a></li>
+          <li><a href="index.html#news">Updates</a></li>
+          <li><a href="contact.html" aria-current="page">Contact</a></li>
+           <li><a href="findus.html">Find us</a></li>
+
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero (same styling as index, but contact-focused) -->
+  <section class="hero">
+    <div class="container">
+      <h1>Get in touch</h1>
+      <p>Questions about prescriptions, deliveries, or services? Send us a message and we’ll get back to you.</p>
+    </div>
+  </section>
+
+  <main id="main" class="section">
+    <div class="container" style="display:grid; gap:2rem;">
+
+      <!-- Contact form -->
+<section aria-labelledby="contact-form-heading" class="card">
+  <h2 id="contact-form-heading">Send a message</h2>
+
+  <form class="contact-form" id="contact-form">
+    <div class="form-grid">
+      <div class="field">
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" autocomplete="name" required placeholder="Jane Doe">
+      </div>
+
+      <div class="field">
+        <label for="email">Email address <span class="req">*</span></label>
+        <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+      </div>
+
+      <div class="field">
+        <label for="phone">Phone (optional)</label>
+        <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="01270 758779">
+      </div>
+
+      <div class="field field--full">
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="6" required placeholder="How can we help?"></textarea>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn">Send message</button>
+        <p id="form-status" class="form-status visually-hidden" aria-live="polite"></p>
+      </div>
+    </div>
+  </form>
+</section>
+
+
+      <!-- Direct contact details (matches footer content) -->
+      <section aria-labelledby="direct-contact-heading" class="card">
+        <h2 id="direct-contact-heading">Call or visit</h2>
+        <p>
+          Moston Pharmacy Services<br>
+          G4, Dragon's Lane<br>
+          Sandbach, CW11 3PA
+        </p>
+        <p>
+          Tel: <a href="tel:+441270758779">01270 758779</a><br>
+          Email: <a href="mailto:pharmacy.fma50@nhs.net">pharmacy.fma50@nhs.net</a>
+        </p>
+        <p><a class="btn" href="tel:+441270758779">Call now</a></p>
+      </section>
+    </div>
+  </main>
+
+  <!-- Optional outro reused but tailored for this page -->
+<!-- Contact-tailored banner -->
+<section class="outro outro--contact">
+  <div class="container outro-inner">
+    <div class="outro-badge">
+      <img src="Logo 8.png" alt="Moston Pharmacy" />
+      <span>Get in touch</span>
+    </div>
+
+    <h2>We’re here to help</h2>
+    <p class="lead">Fast answers on prescriptions, deliveries and services. We aim to reply within one working day.</p>
+
+    <div class="outro-actions">
+      <a href="tel:+441270758779" class="btn btn--light" aria-label="Call Moston Pharmacy on 01270 758779">
+        Call 01270 758779
+      </a>
+      <a href="mailto:pharmacy.fma50@nhs.net" class="btn btn--ghost" aria-label="Email Moston Pharmacy">
+        Email us
+      </a>
+      <a
+        href="https://maps.google.com/?q=Moston+Pharmacy+Services,+G4+Dragon%27s+Lane,+Sandbach,+CW11+3PA"
+        target="_blank" rel="noopener noreferrer"
+        class="btn btn--ghost" aria-label="Open directions in Google Maps (new tab)"
+      >
+        Find us
+      </a>
+    </div>
+
+    <ul class="outro-points">
+      <li>Mon–Fri 9:00–17:00</li>
+      <li>Free local delivery (eligible patients)</li>
+      <li>Accessible parking</li>
+    </ul>
+  </div>
+</section>
+
+
+  <!-- Footer (same as index) -->
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div>
+        <h3>Contact</h3>
+        <p>
+          Moston Pharmacy Services<br>
+          G4, Dragon's Lane<br>
+          Sandbach, CW11 3PA
+        </p>
+        <p>
+          Tel: <a href="tel:+441270758779">01270 758779</a><br>
+          Email: <a href="mailto:pharmacy.fma50@nhs.net">pharmacy.fma50@nhs.net</a>
+        </p>
+      </div>
+
+      <div>
+        <h3>Opening hours</h3>
+        <ul class="hours">
+          <li>Mon–Fri: 9:00 – 17:00</li>
+          <li>Sat–Sun: Closed</li>
+        </ul>
+      </div>
+<div>
+  <h3>Follow</h3>
+  <ul class="social">
+    <li>
+      <a href="https://www.facebook.com/profile.php?id=61579751310589" 
+         target="_blank" 
+         rel="noopener noreferrer"
+         aria-label="Visit our Facebook page (opens in a new tab)"
+         >
+        Facebook
+      </a>
+    </li>
+    <li>
+      <a href="https://www.instagram.com/your-handle" 
+         target="_blank" 
+         rel="noopener noreferrer"
+         aria-label="Visit our Instagram (opens in a new tab)">
+        Instagram
+      </a>
+    </li>
+  </ul>
+</div>
+
+    <div class="container footer-bottom">
+      <small>© <span id="year"></span> Moston Pharmacy Services Ltd. All rights reserved.</small>
+    </div>
+  </footer>
+</body>
+</html>

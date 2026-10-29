@@ -6,6 +6,7 @@ node_modules/
 
 # Build output (if you use a bundler later)
 dist/
+build/
 out/
 
 # OS junk
@@ -19,3 +20,9 @@ backups/
 .env.*
 !.env.example
 *.sqlite*
+
+# Static-preview secrets and local build state
+.dev.vars
+.dev.vars.*
+.wrangler/
+*.pending

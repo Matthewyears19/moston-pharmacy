@@ -5,7 +5,10 @@ const $ = (id) => document.getElementById(id);
 const esc = (value) =>
   String(value ?? '').replace(
     /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        c
+      ],
   );
 async function api(path, method = 'GET', body) {
   const response = await fetch(path, {
@@ -32,12 +35,14 @@ function render() {
     .join('');
 }
 function collect() {
-  content.prices = [...document.querySelectorAll('[data-price]')].map((row) => ({
-    id: row.dataset.price,
-    product: row.querySelector('[data-field="product"]').value,
-    dose: row.querySelector('[data-field="dose"]').value,
-    price: Number(row.querySelector('[data-field="price"]').value),
-  }));
+  content.prices = [...document.querySelectorAll('[data-price]')].map(
+    (row) => ({
+      id: row.dataset.price,
+      product: row.querySelector('[data-field="product"]').value,
+      dose: row.querySelector('[data-field="dose"]').value,
+      price: Number(row.querySelector('[data-field="price"]').value),
+    }),
+  );
   content.news = [...document.querySelectorAll('[data-news]')].map((row) => ({
     id: row.dataset.news,
     title: row.querySelector('[data-field="title"]').value,
@@ -47,16 +52,6 @@ function collect() {
   }));
 }
 function status(data) {
-  const states = {
-    preview: 'Local demonstration — not emailed',
-    pending: 'Waiting for email provider',
-    accepted: 'Accepted by email provider — inbox receipt unconfirmed',
-    'needs-review': 'Needs delivery investigation',
-    expired: 'Expired before delivery',
-  };
-  $('queue-status').textContent = data.queue.length
-    ? data.queue.map((q) => `${states[q.state] ?? q.state}: ${q.count}`).join(' · ')
-    : 'No submissions yet.';
   $('audit-list').innerHTML =
     data.audit
       .map(
@@ -74,13 +69,18 @@ async function load() {
   $('editor').hidden = false;
   render();
   status(data);
+  document.body.dataset.localEditor = String(data.local);
 }
 $('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.target.querySelector('button');
   button.disabled = true;
   try {
-    await api('/api/login', 'POST', Object.fromEntries(new FormData(event.target)));
+    await api(
+      '/api/login',
+      'POST',
+      Object.fromEntries(new FormData(event.target)),
+    );
     event.target.reset();
     await load();
     $('login-status').textContent = '';
@@ -112,7 +112,10 @@ $('editor-form').addEventListener('submit', async (event) => {
   try {
     content = await api('/api/content', 'POST', content);
     dirty = false;
-    $('save-status').textContent = 'Saved. Your website is up to date.';
+    $('save-status').textContent =
+      document.body.dataset.localEditor === 'true'
+        ? 'Saved locally and rebuilt. Refresh the website to see your changes.'
+        : 'Saved to GitHub. The website is rebuilding; changes appear after a successful deployment.';
     render();
     status(await api('/api/admin'));
   } catch (e) {
@@ -123,7 +126,12 @@ $('editor-form').addEventListener('submit', async (event) => {
 });
 $('add-price').addEventListener('click', () => {
   collect();
-  content.prices.push({ id: crypto.randomUUID(), product: '', dose: '', price: 0 });
+  content.prices.push({
+    id: crypto.randomUUID(),
+    product: '',
+    dose: '',
+    price: 0,
+  });
   dirty = true;
   render();
   document.querySelector('[data-price]:last-child input').focus();
@@ -145,7 +153,11 @@ $('editor-form').addEventListener('click', (event) => {
   const price = event.target.dataset.removePrice,
     news = event.target.dataset.removeNews;
   if (!price && !news) return;
-  if (!confirm('Remove this item? It will only disappear from the website when you save changes.'))
+  if (
+    !confirm(
+      'Remove this item? It will only disappear from the website when you save changes.',
+    )
+  )
     return;
   collect();
   if (price) content.prices = content.prices.filter((p) => p.id !== price);
@@ -154,17 +166,26 @@ $('editor-form').addEventListener('click', (event) => {
   render();
   $('save-status').textContent = 'Unsaved changes';
 });
-$('refresh-queue').addEventListener('click', async () => {
-  try {
-    status(await api('/api/admin'));
-  } catch (e) {
-    $('queue-status').textContent = e.message;
-  }
-});
 window.addEventListener('beforeunload', (e) => {
   if (dirty) {
     e.preventDefault();
     e.returnValue = '';
   }
 });
-load().catch(() => {});
+async function initialise() {
+  try {
+    const config = await api('/api/editor-config');
+    $('login-form').hidden = !config.local;
+    $('github-login').hidden = config.local || !config.configured;
+    $('login-help').textContent = config.local
+      ? 'Local demonstration: use your separate staff password. Hosted staff use their own approved GitHub accounts.'
+      : config.configured
+        ? 'Use your approved GitHub account. Saving changes updates the website after a rebuild.'
+        : 'The hosted editor needs its GitHub connection set up. See the hosting setup guide.';
+    await load();
+  } catch (e) {
+    if (e.message !== 'Please sign in to edit the website.')
+      $('login-status').textContent = e.message;
+  }
+}
+initialise();

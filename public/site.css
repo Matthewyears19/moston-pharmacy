@@ -1,6 +1,6 @@
 @font-face {
   font-family: LocalSystem;
-  src: local('Segoe UI');
+  src: local("Segoe UI");
 }
 :root {
   --ink: #173c34;
@@ -13,6 +13,29 @@
   --soft: #eff3e9;
   --white: #fff;
   --radius: 18px;
+}
+.preview-login {
+  max-width: 560px;
+  margin: 10vh auto;
+  padding: 32px;
+}
+.preview-login h1 {
+  font-size: clamp(2.3rem, 8vw, 3.8rem);
+}
+.preview-login input {
+  margin-bottom: 22px;
+}
+.preview-login [role="alert"] {
+  color: #962e2e;
+  margin-top: 20px;
+}
+.preview-exit {
+  background: none;
+  border: none;
+  color: inherit;
+  text-decoration: underline;
+  font: inherit;
+  padding: 0;
 }
 * {
   box-sizing: border-box;

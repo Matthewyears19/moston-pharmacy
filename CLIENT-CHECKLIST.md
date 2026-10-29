@@ -1,56 +1,48 @@
-# Decisions and launch checklist
+# Decisions and remaining work
 
-Updated 30 September 2026. This replaces the unresolved assumptions in the initial review.
+Updated 29 October 2026 for Cloudflare Workers. Earlier MySQL and Pages setup instructions are superseded.
 
-## Confirmed by Matthew
+## Confirmed and implemented
 
-- Phone: 01270 758779. Monitored email: pharmacy.fma50@nhs.net.
-- Address and accessibility statements are correct. Instagram does not exist and has been removed.
-- Keep mostonpharmacy.co.uk; Matthew operates the site, pharmacy funds it.
-- Prescriptions are supplied through PharmaDoctor; consultations and follow-ups are handled at Moston.
-- Use September 1st prices where supplied. Retain other prices, news and service promises for now.
-- Use applicable text from the pharmacist's RTF and price-list documents.
-- Reproduce the old prescription-authorisation process and email the details for pharmacy processing.
-- Named accounts for editing prices/news.
-- Test email: matthew.years18@gmail.com, using fictional information only.
+- Phone 01270 758779; pharmacy.fma50@nhs.net monitored. Address/accessibility confirmed; no Instagram.
+- Keep mostonpharmacy.co.uk. Matthew operates the website; pharmacy funds it.
+- Moston consultations/follow-ups; prescriptions through PharmaDoctor. Applicable pharmacist copy preserved, September prices and retained news unchanged.
+- Sensitive/prescription enquiries show the address and mailto button. No prescription web form.
+- Nominate through GP OR NHS App, then contact Moston. Free delivery by arrangement.
+- Lymphoedema garments, prescription hosiery and nurse dressing prescriptions included.
+- Static pages, file-based prices/news, Git-backed staff editor and server-enforced preview password.
+- No MySQL subscription or always-running hosted Node process. Enquiries are not stored or queued.
+- Real sending disabled until Resend setup. Fictional test recipient: matthew.years18@gmail.com.
+
+## Matthew's next setup steps
+
+- [ ] Review the local website and local editor. Current passwords are in ignored `data/preview-access.txt` and `data/demo-access.txt`.
+- [ ] Create/access Cloudflare Workers and connect a private GitHub repository/selected branch; use the Workers commands in HOSTING.md. Review existing GitHub Pages publishing before pushing replacement code.
+- [ ] Set Worker runtime preview secrets and Turnstile keys; preserve run_worker_first=true and verify asset protection before sharing the workers.dev URL.
+- [ ] Register/install the GitHub App on the website repository, provide named editor usernames, and verify an edit triggers a successful rebuild.
+- [ ] Set up Resend's verified domain/From address later; keep sending disabled until ready for fictional tests.
+- [ ] Recover Squarespace/domain DNS access. Keep domain registration; change hosting/DNS only as part of the planned launch.
 
 ## Ask the pharmacy
 
-- [ ] Confirm the September price schedule, supply quantity for each price, consultation costs and current product availability. The editor is ready to demonstrate corrections together.
-- [ ] Confirm inclusion of Ozempic in the supplied weight-management price sheet; it appears in the DOCX but not the RTF product list. Do not assume its inclusion establishes a weight-management indication.
-- [ ] Review the actual public wording and placement of medicine information/prices before launch. Source wording is preserved; it has not been independently clinically validated. Resolve the inconsistent monthly weight-loss figures, switching advice and outcome claims in the source if the pharmacist wants revisions. Public advertising restrictions remain separate from authorship.
-- [ ] Confirm both retained 2025 announcements remain suitable, especially “Pharmacy First - Contraception” and “full anonymity”. They are retained at the owner's request, not independently verified claims.
-- [ ] Confirm the scope of Pharmacy First, including whether childhood earache should be added; existing six-condition content is retained.
-- [ ] Confirm pharmacy registration 9010798 and legal trading details from the old site before adding a regulator link/badge.
-- [ ] Provide the current complaints procedure, contact person and escalation route. The old external-provider page's ICAS contacts have not been copied.
-- [ ] Approve the full privacy notice, lawful basis/special-category handling, email processor and the retention policy for submissions, mailbox copies, logs and backups. Assess DPIA requirements for this workflow.
-- [ ] Confirm which staff will monitor incoming registration requests and what patients should expect after submitting.
-- [ ] Decide whether patients should receive a copy of registration details. The old form offered this; this version avoids duplicating sensitive information to another inbox by default. It sends to the pharmacy only.
-- [ ] Confirm delivery coverage, any exclusions and bank-holiday arrangements if more specific public guidance is wanted.
-- [ ] Supply each editor's name and email, an account owner and an offboarding contact.
-- [ ] Ask the old provider to redirect old URLs/domain, preserve any records according to policy and agree termination. Matthew cannot make these changes without access. Prefer a transition period over immediately losing old links.
+- [ ] Confirm September prices, supply quantities, consultation costs and availability using the editor demonstration.
+- [ ] Review supplied medicine information and public presentation, including Ozempic inclusion, weight-loss figures and switching advice.
+- [ ] Confirm retained 2025 news and Pharmacy First coverage remain suitable.
+- [ ] Confirm legal trading/registration details, complaints procedure and responsible contact.
+- [ ] Approve final privacy wording for Cloudflare/Turnstile, GitHub staff access, Resend, accidental sensitive enquiries and mailbox/provider retention. No patient information belongs in news/content files.
+- [ ] Confirm who monitors enquiries and prescription emails and expected response arrangements.
+- [ ] Supply any delivery coverage/exclusions or bank-holiday details needed in public wording.
+- [ ] Provide named editors and an offboarding owner; confirm GitHub repository write access is acceptable for those people.
+- [ ] Ask the old provider to arrange redirects and a transition before termination. Matthew cannot control that domain/provider yet.
 
-## What Matthew needs to arrange
+## Before public launch
 
-- [ ] Identify current hosting, domain registrar/DNS access and hosting budget.
-- [ ] Select persistent backend hosting and approve an email provider with the pharmacy.
-- [ ] Own the hosting/email accounts in a way that permits pharmacy handover; enable MFA and document billing/recovery ownership.
-- [ ] Configure a verified sender on mostonpharmacy.co.uk. Receiving at an NHS address does not authorise sending from nhs.net.
-- [ ] Store API credentials and the data-encryption key in hosting secrets, never in public code or chat.
-- [ ] Test fictional enquiries and prescription registrations to Matthew's Gmail inbox, including spam folder and replies.
-- [ ] Arrange a pharmacy staff member to confirm a final fictional-data test to pharmacy.fma50@nhs.net; Gmail delivery does not prove NHS inbox delivery.
+- [ ] Test actual hosted GitHub sign-in, Turnstile, build triggers and password protection. Local tests use mocked external services.
+- [ ] Verify fictional email receipt in Gmail, then with a pharmacy staff member in the NHS inbox.
+- [ ] Confirm privacy/complaints/clinical copy and final prices; test mobile, keyboard and zoom on the deployed site.
+- [ ] Confirm domain/HTTPS/alias redirects, free-tier usage and failure alerts.
+- [ ] Assign ownership for failed builds/emails, dependency updates, source backup, staff access and renewals.
 
-## Implementation before public launch
+## Demonstration
 
-- [ ] Final approved clinical, price, privacy and complaints content.
-- [ ] Private staging access, production MFA/account recovery approach, trusted-proxy/edge abuse limits and production security review.
-- [ ] Configure delivery/bounce and queue failure monitoring, alerts, encrypted off-host backups and a successful restoration drill.
-- [ ] Provision fresh production accounts/database/key; do not upload the local demo database or credentials.
-- [ ] Confirm real provider receipt, retries and delivery records; current automated provider tests use a fake response and are not real email-delivery evidence.
-- [ ] Verify domain routing, HTTPS, canonical redirects and existing link migration. The local redirects cannot control the old provider's domain.
-- [ ] Test the final deployment on mobile, keyboard, zoom and browsers; test production-specific privacy/access controls.
-- [ ] Agree who maintains runtime updates, account removals, backups, email failures and renewals. Pharmacy owns routine news/prices and inbox processing.
-
-## Suggested pharmacy demonstration
-
-Show the new home page, local consultation explanation and delivery registration. Open the staff area, correct one September price together, save and refresh the public page. Add a draft news item, then publish it. Use a clearly fictional registration to demonstrate receipt without sending live patient information. Finish by assigning the outstanding client decisions above.
+Unlock preview, show services and nomination steps, then sign into the local editor using its separate password. Change a price, save and refresh the website; restore the original afterwards. Add a draft news article and verify it stays off the public page. Demonstrate the enquiry form with fictional details: demo mode does not store or email the message. On the hosted version, saves go to GitHub and become visible after deployment succeeds.

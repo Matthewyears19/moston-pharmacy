@@ -2,6 +2,23 @@
   "name": "moston-pharmacy",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.13 <25" },
-  "scripts": { "start": "node --env-file-if-exists=.env app/server.js", "test": "node --test tests/*.test.js" }
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "setup": "node scripts/setup-local.js",
+    "build": "node scripts/build.js",
+    "start": "node scripts/dev.js",
+    "test": "node --test tests/*.test.js",
+    "test:workers": "node --test tests/workers.test.js",
+    "dev:workers": "pnpm build && wrangler dev --ip 127.0.0.1 --port 4174",
+    "deploy": "wrangler deploy",
+    "deploy:check": "wrangler deploy --dry-run",
+    "deploy:preview": "wrangler preview"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "wrangler": "4.154.0"
+  },
+  "packageManager": "pnpm@11.25.0"
 }

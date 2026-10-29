@@ -18,38 +18,86 @@ document.addEventListener('keydown', (e) => {
     toggle.focus();
   }
 });
-document.querySelectorAll('[data-public-form]').forEach((form) => {
+
+async function prepareForm(form) {
+  const button = form.querySelector('button[type="submit"]'),
+    status = form.querySelector('[role="status"]');
+  let widget, config, sentFingerprint;
+  const initialise = async () => {
+    const response = await fetch('/api/form-config');
+    config = await response.json();
+    if (!response.ok)
+      throw new Error(
+        config.error || 'The form is unavailable. Please phone or email us.',
+      );
+    form.elements.csrf.value = config.csrf;
+    form.elements.submissionId.value = config.submissionId;
+  };
+  try {
+    await initialise();
+    if (config.siteKey) {
+      const script = document.createElement('script');
+      script.src =
+        'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(
+            new Error(
+              'Spam protection could not load. Please phone or email us.',
+            ),
+          );
+        document.head.append(script);
+      });
+      widget = window.turnstile.render(
+        form.querySelector('.turnstile-container'),
+        { sitekey: config.siteKey, action: 'enquiry' },
+      );
+    }
+    button.disabled = false;
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add('error');
+    return;
+  }
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const button = form.querySelector('button[type="submit"]'),
-      status = form.querySelector('[role="status"]');
     button.disabled = true;
     status.classList.remove('error');
-    status.textContent = 'Sending your request…';
+    status.textContent = 'Sending your enquiry…';
     try {
+      const details = new FormData(form);
+      const fingerprint = JSON.stringify(
+        ['name', 'email', 'phone', 'message'].map((key) => details.get(key)),
+      );
+      if (sentFingerprint && sentFingerprint !== fingerprint)
+        await initialise();
+      sentFingerprint = fingerprint;
       const response = await fetch(form.action, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams(new FormData(form)),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(25000),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Please try again.');
+      if (!response.ok)
+        throw new Error(
+          result.error || 'Sending failed. Please phone or email us.',
+        );
       status.textContent = result.message;
       form.reset();
-      button.textContent = 'Request received';
+      button.textContent = 'Enquiry processed';
       status.focus();
     } catch (error) {
       status.classList.add('error');
       status.textContent =
         error.name === 'TimeoutError'
-          ? 'The connection timed out. You can retry safely using this form; the same request will not be queued twice.'
+          ? 'We could not confirm acceptance. Retry the unchanged enquiry on this page or phone/email the pharmacy. Nothing is stored for later sending.'
           : error.message;
+      if (widget !== undefined) window.turnstile.reset(widget);
       button.disabled = false;
       status.focus();
     }
   });
-});
+}
+document.querySelectorAll('[data-public-form]').forEach(prepareForm);

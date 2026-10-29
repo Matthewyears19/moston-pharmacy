@@ -1,266 +1,631 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtemp, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
-import { randomBytes } from 'node:crypto';
-import { createApp } from '../app/server.js';
-import { passwordHash } from '../app/store.js';
-import { validateForm, validateContent } from '../app/validation.js';
-import { seed } from '../app/config.js';
-import { backup, DatabaseSync } from 'node:sqlite';
-test('validation rejects invalid dates, missing authorisation and invalid prices', () => {
-  assert.throws(() =>
-    validateForm('prescription', {
-      email: 'test@example.com',
-      phone: '01234567890',
-      title: 'Ms',
-      firstName: 'Fictional',
-      lastName: 'Patient',
-      address: 'Test address',
-      postcode: 'CW11 3PA',
-      doctor: 'Test Doctor',
-      surgery: 'Test Surgery',
-      surgeryPostcode: 'CW11 3PA',
-      dob: '2024-02-30',
-      authorisation: 'yes',
+import { join, resolve } from 'node:path';
+import { createHandler } from '../edge/worker.js';
+import { seal, unseal, random, encoder, b64, digest } from '../edge/utils.js';
+import { buildSite } from '../scripts/build.js';
+import { createLocal } from '../scripts/dev.js';
+import { validateContent } from '../app/validation.js';
+const origin = 'https://preview.example.com';
+const baseEnv = () => ({
+  APP_MODE: 'demo',
+  MAIL_MODE: 'preview',
+  SITE_ORIGIN: origin,
+  PREVIEW_ENABLED: 'true',
+  PREVIEW_PASSWORD: random(),
+  SESSION_SECRET: random(),
+  TURNSTILE_SITE_KEY: 'public-sitekey',
+  TURNSTILE_SECRET_KEY: 'test-secret',
+  ASSETS: { fetch: async () => new Response('STATIC PAGE') },
+  FETCH: async (url) => {
+    assert.equal(
+      url,
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    );
+    return Response.json({
+      success: true,
+      hostname: 'preview.example.com',
+      action: 'preview',
+    });
+  },
+});
+const cookie = (response) =>
+  response.headers
+    .getSetCookie()
+    .map((x) => x.split(';')[0])
+    .join('; ');
+function request(
+  path,
+  { method = 'GET', data, cookies = '', csrf, originHeader = origin } = {},
+) {
+  return new Request(origin + path, {
+    method,
+    headers: {
+      Cookie: cookies,
+      ...(method === 'POST'
+        ? { Origin: originHeader, 'Content-Type': 'application/json' }
+        : {}),
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+    },
+    ...(data ? { body: JSON.stringify(data) } : {}),
+  });
+}
+async function unlock(handler, env) {
+  const r = await handler(
+    request('/preview', {
+      method: 'POST',
+      data: {
+        password: env.PREVIEW_PASSWORD,
+        'cf-turnstile-response': 'fictional',
+      },
     }),
+    env,
   );
-  assert.throws(() =>
-    validateContent({
-      ...seed,
-      revision: 1,
-      prices: [{ id: 'a', product: 'Test', dose: 'Test', price: -1 }],
-    }),
-  );
-  assert.throws(() =>
-    validateContent({
-      ...seed,
-      revision: 1,
-      prices: [{ id: 'a', product: 'Test', dose: 'Test', price: 1.001 }],
-    }),
+  assert.equal(r.status, 303);
+  return cookie(r);
+}
+const sourceContent = JSON.parse(
+  await readFile(
+    new URL('../content/site-content.json', import.meta.url),
+    'utf8',
+  ),
+);
+
+test('sealed sessions reject tampering, expiration, different purposes and rotated secrets', async () => {
+  const secret = random();
+  const value = await seal({ user: 'test' }, secret, 'staff');
+  assert.equal((await unseal(value, secret, 'staff')).user, 'test');
+  assert.equal(await unseal(value, random(), 'staff'), null);
+  assert.equal(await unseal(value, secret, 'view'), null);
+  assert.equal(await unseal(value + 'broken', secret, 'staff'), null);
+  assert.equal(
+    await unseal(await seal({}, secret, 'staff', -1), secret, 'staff'),
+    null,
   );
 });
-test('pages, account controls, publishing, form validation, encrypted queue and retention', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'moston-test-'));
-  const app = createApp({
-    directory,
-    key: randomBytes(32),
-    origin: 'http://127.0.0.1:4173',
-    mode: 'demo',
-  });
-  await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${app.server.address().port}`;
-  const request = (url, options = {}) => fetch(base + url, options);
-  const post = (url, data, extra = {}) =>
-    request(url, {
-      method: 'POST',
-      headers: {
-        Origin: app.origin,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...extra,
-      },
-      body: JSON.stringify(data),
-    });
-  try {
-    for (const path of [
-      '/',
-      '/weight-management',
-      '/prescriptions',
-      '/contact',
-      '/find-us',
-      '/pharmacy-first',
-      '/privacy',
-      '/complaints',
-      '/admin',
-    ]) {
-      const r = await request(path);
-      assert.equal(r.status, 200, path);
-      assert.ok(r.headers.get('content-security-policy'));
-      const html = await r.text();
-      assert.ok(html.includes('<main id="main">'));
-      assert.ok(!html.includes('your-handle'));
-      assert.ok(!html.includes('formspree.io'));
-    }
-    assert.equal((await request('/public/site.css')).status, 200);
-    for (const secret of [
-      '/app/server.js',
-      '/data/pharmacy.sqlite',
-      '/.env',
-      '/content/pharmacist-copy.json',
-    ])
-      assert.equal((await request(secret)).status, 404);
-    assert.equal((await request('/api/admin')).status, 401);
-    app.store.db
-      .prepare('INSERT INTO users(name,email,password) VALUES(?,?,?)')
-      .run('Test Editor', 'editor@example.com', passwordHash('a-long-fictional-password'));
+
+test('password gate protects pages, assets and APIs; fails closed and rejects cross-origin requests', async () => {
+  const env = baseEnv(),
+    handler = createHandler();
+  for (const path of [
+    '/',
+    '/admin',
+    '/public/logo.png',
+    '/prescriptions',
+    '/index.html',
+  ]) {
+    const r = await handler(request(path), env);
+    assert.equal(r.status, 303, path);
+    assert.equal(r.headers.get('Location'), '/preview');
+    assert.match(r.headers.get('Cache-Control'), /no-store/);
+  }
+  assert.equal((await handler(request('/api/admin'), env)).status, 401);
+  assert.equal(
+    (
+      await handler(
+        request('/preview', {
+          method: 'POST',
+          data: { password: env.PREVIEW_PASSWORD },
+          originHeader: 'https://evil.example',
+        }),
+        env,
+      )
+    ).status,
+    403,
+  );
+  const login = await unlock(handler, env);
+  assert.match(login, /moston_preview=/);
+  const page = await handler(request('/', { cookies: login }), env);
+  assert.equal(await page.text(), 'STATIC PAGE');
+  assert.equal(page.headers.get('X-Robots-Tag'), 'noindex, nofollow');
+  assert.equal(
+    (
+      await handler(request('/', { cookies: login }), {
+        ...env,
+        PREVIEW_PASSWORD: random(),
+      })
+    ).status,
+    303,
+  );
+  for (const path of [
+    '/.dev.vars',
+    '/.env',
+    '/content/site-content.json',
+    '/data/preview-access.txt',
+    '/_worker.js',
+    '/database/001-initial.sql',
+  ])
     assert.equal(
-      (await post('/api/login', { email: 'editor@example.com', password: 'wrong' })).status,
+      (await handler(request(path, { cookies: login }), env)).status,
+      404,
+      path,
+    );
+  assert.equal(
+    (
+      await handler(
+        request('/api/forms/prescription', {
+          method: 'POST',
+          cookies: login,
+          data: {},
+        }),
+        env,
+      )
+    ).status,
+    410,
+  );
+  assert.equal(
+    (await handler(request('/api/admin', { cookies: login }), env)).status,
+    401,
+  );
+  assert.equal(
+    (
+      await handler(
+        request('/api/login', {
+          method: 'POST',
+          cookies: login,
+          data: { password: 'anything' },
+        }),
+        { ...env, LOCAL_EDITOR: 'true' },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await handler(request('/'), { ...env, PREVIEW_PASSWORD: '' })).status,
+    503,
+  );
+  assert.equal(
+    (await handler(request('/'), { ...env, PREVIEW_ENABLED: 'false' })).status,
+    503,
+  );
+  assert.equal(
+    (await handler(request('/'), { ...env, APP_MODE: 'live' })).status,
+    503,
+  );
+  assert.equal(
+    (await handler(new Request('https://wrong.example.com/'), env)).status,
+    421,
+  );
+  const exit = await handler(
+    request('/preview/exit', { method: 'POST', cookies: login, data: {} }),
+    env,
+  );
+  assert.equal(exit.headers.getSetCookie().length, 3);
+  assert.match(exit.headers.getSetCookie()[0], /Max-Age=0/);
+  const limited = createHandler();
+  for (let i = 0; i < 8; i++)
+    assert.equal(
+      (
+        await limited(
+          request('/preview', {
+            method: 'POST',
+            data: { password: 'wrong', 'cf-turnstile-response': 'ok' },
+          }),
+          env,
+        )
+      ).status,
       401,
     );
-    const login = await post('/api/login', {
-      email: 'editor@example.com',
-      password: 'a-long-fictional-password',
+  assert.equal(
+    (
+      await limited(
+        request('/preview', { method: 'POST', data: { password: 'wrong' } }),
+        env,
+      )
+    ).status,
+    429,
+  );
+});
+
+test('enquiries never persist; demo never calls Resend; test transport validates Turnstile, recipient and retries', async () => {
+  const env = baseEnv();
+  env.APP_MODE = 'test';
+  env.MAIL_MODE = 'resend';
+  env.TEST_EMAIL = 'fictional@example.com';
+  env.MAIL_FROM = 'Moston <enquiries@example.com>';
+  env.RESEND_API_KEY = 'fictional-key';
+  const handler = createHandler({ buildMode: 'test' });
+  let challengeAction = 'preview',
+    challengeValid = true,
+    providerStatus = 200;
+  const sent = [];
+  env.FETCH = async (url, options) => {
+    if (url.includes('siteverify'))
+      return Response.json({
+        success: challengeValid,
+        hostname: 'preview.example.com',
+        action: challengeAction,
+      });
+    assert.equal(url, 'https://api.resend.com/emails');
+    sent.push({
+      body: JSON.parse(options.body),
+      key: options.headers['Idempotency-Key'],
     });
-    assert.equal(login.status, 200);
-    const cookie = login.headers.get('set-cookie').split(';')[0];
-    const admin = await (await request('/api/admin', { headers: { Cookie: cookie } })).json();
-    assert.equal(admin.user.name, 'Test Editor');
-    const headers = { Cookie: cookie, 'X-CSRF-Token': admin.csrf };
-    const updated = structuredClone(admin.content);
-    updated.prices[0].price = 201.25;
-    updated.news[0].title = '<script>alert(1)</script>';
-    assert.equal((await post('/api/content', updated, { Cookie: cookie })).status, 403);
-    assert.equal(
-      (await post('/api/content', updated, { ...headers, Origin: 'https://evil.example' })).status,
-      403,
+    return Response.json(
+      providerStatus === 200
+        ? { id: 'fictional' }
+        : { error: 'provider failure' },
+      { status: providerStatus },
     );
-    assert.equal((await post('/api/content', updated, headers)).status, 200);
-    assert.equal((await post('/api/content', updated, headers)).status, 409);
-    const home = await (await request('/')).text();
-    assert.ok(home.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
-    assert.ok(!home.includes('<script>alert(1)</script>'));
-    assert.ok((await (await request('/weight-management')).text()).includes('£201.25'));
-    const html = await (await request('/contact')).text();
-    const csrf = /name="csrf" value="([a-f0-9]+)"/.exec(html)[1],
-      submissionId = /name="submissionId" value="([a-f0-9]+)"/.exec(html)[1];
-    const form = {
-      csrf,
-      submissionId,
-      name: 'Fictional Person',
-      email: 'fictional@example.com',
-      phone: '',
-      message: "Test only'); DROP TABLE users; --",
+  };
+  const viewing = await unlock(handler, env);
+  challengeAction = 'enquiry';
+  const config = await (
+    await handler(request('/api/form-config', { cookies: viewing }), env)
+  ).json();
+  const data = {
+    name: 'Fictional Visitor',
+    email: 'visitor@example.com',
+    phone: '',
+    message: 'What time do you open?',
+    basicOnly: 'yes',
+    website: '',
+    csrf: config.csrf,
+    submissionId: config.submissionId,
+    'cf-turnstile-response': 'fictional-token',
+  };
+  const send = (extra) =>
+    handler(
+      request('/api/forms/contact', {
+        method: 'POST',
+        cookies: viewing,
+        data: { ...data, ...extra },
+      }),
+      env,
+    );
+  assert.equal((await send({ dob: '2000-01-01' })).status, 400);
+  assert.equal((await send({ basicOnly: 'no' })).status, 400);
+  assert.equal((await send({ csrf: 'forged' })).status, 403);
+  assert.equal(sent.length, 0);
+  challengeValid = false;
+  assert.equal((await send()).status, 400);
+  assert.equal(sent.length, 0);
+  challengeValid = true;
+  providerStatus = 503;
+  assert.equal((await send()).status, 503);
+  providerStatus = 200;
+  const accepted = await send();
+  assert.equal(accepted.status, 200);
+  assert.match((await accepted.json()).message, /test inbox/);
+  assert.equal(sent[0].key, sent[1].key);
+  assert.deepEqual(sent[1].body.to, ['fictional@example.com']);
+  assert.equal(sent[1].body.reply_to, 'visitor@example.com');
+  assert.match(sent[1].body.text, /What time/);
+  const demo = baseEnv();
+  demo.FETCH = async () =>
+    Response.json({
+      success: true,
+      hostname: 'preview.example.com',
+      action: 'preview',
+    });
+  const h = createHandler(),
+    view = await unlock(h, demo);
+  const c = await (
+    await h(request('/api/form-config', { cookies: view }), demo)
+  ).json();
+  demo.FETCH = async (url) => {
+    assert.ok(url.includes('siteverify'), 'Demo must not send mail');
+    return Response.json({
+      success: true,
+      hostname: 'preview.example.com',
+      action: 'enquiry',
+    });
+  };
+  const result = await h(
+    request('/api/forms/contact', {
+      method: 'POST',
+      cookies: view,
+      data: { ...data, csrf: c.csrf, submissionId: c.submissionId },
+    }),
+    demo,
+  );
+  assert.match(
+    (await result.json()).message,
+    /Nothing has been emailed or stored/,
+  );
+});
+
+test('GitHub App OAuth uses state and PKCE, named allowlist, encrypted sessions, SHA conflicts and revocation', async () => {
+  const env = {
+    ...baseEnv(),
+    GITHUB_REPO: 'example/pharmacy',
+    GITHUB_BRANCH: 'website',
+    GITHUB_CLIENT_ID: 'fictional-client',
+    GITHUB_CLIENT_SECRET: 'fictional-secret',
+    GITHUB_EDITORS: 'pharmacist',
+  };
+  const handler = createHandler(),
+    view = await unlock(handler, env);
+  let login = 'pharmacist',
+    push = true,
+    sha = 'a'.repeat(40),
+    current = structuredClone(sourceContent),
+    expectedChallenge,
+    exchangeCount = 0;
+  env.FETCH = async (url, options = {}) => {
+    if (url === 'https://github.com/login/oauth/access_token') {
+      exchangeCount++;
+      const exchange = JSON.parse(options.body);
+      assert.equal(await digest(exchange.code_verifier), expectedChallenge);
+      assert.equal(exchange.redirect_uri, origin + '/api/auth/callback');
+      return Response.json({
+        access_token: 'ghu_FICTIONAL',
+        expires_in: 28800,
+      });
+    }
+    assert.equal(options.headers.Authorization, 'Bearer ghu_FICTIONAL');
+    if (url.endsWith('/user'))
+      return Response.json({ login, name: 'Named Pharmacist' });
+    if (url.endsWith('/repos/example/pharmacy'))
+      return Response.json({ permissions: { push } });
+    if (url.includes('/commits?'))
+      return Response.json([
+        {
+          author: { login },
+          commit: {
+            author: { name: 'Named Pharmacist', date: '2026-10-21T12:00:00Z' },
+            message: 'Update content',
+          },
+        },
+      ]);
+    if (url.includes('/contents/content/site-content.json')) {
+      if (options.method === 'PUT') {
+        const update = JSON.parse(options.body);
+        assert.equal(update.branch, 'website');
+        assert.match(update.message, /pharmacist/);
+        if (update.sha !== sha)
+          return Response.json({ message: 'Conflict' }, { status: 409 });
+        current = JSON.parse(
+          Buffer.from(update.content, 'base64').toString('utf8'),
+        );
+        sha = 'b'.repeat(40);
+        return Response.json({ content: { sha } });
+      }
+      assert.ok(url.endsWith('?ref=website'));
+      return Response.json({
+        encoding: 'base64',
+        size: 1000,
+        content: b64(encoder.encode(JSON.stringify(current))),
+        sha,
+      });
+    }
+    throw new Error('Unexpected request ' + url);
+  };
+  const started = await handler(
+    request('/api/auth/start', { cookies: view }),
+    env,
+  );
+  const target = new URL(started.headers.get('Location'));
+  assert.equal(target.origin, 'https://github.com');
+  assert.equal(target.searchParams.get('code_challenge_method'), 'S256');
+  expectedChallenge = target.searchParams.get('code_challenge');
+  const oauthCookie = cookie(started);
+  assert.match(started.headers.get('Set-Cookie'), /SameSite=Lax/);
+  const invalid = await handler(
+    request('/api/auth/callback?code=fictional&state=wrong', {
+      cookies: view + '; ' + oauthCookie,
+    }),
+    env,
+  );
+  assert.equal(invalid.status, 403);
+  assert.equal(exchangeCount, 0);
+  const finished = await handler(
+    request(
+      '/api/auth/callback?code=fictional&state=' +
+        target.searchParams.get('state'),
+      { cookies: view + '; ' + oauthCookie },
+    ),
+    env,
+  );
+  assert.equal(finished.status, 303);
+  assert.equal(finished.headers.get('Location'), '/admin');
+  assert.ok(!cookie(finished).includes('ghu_FICTIONAL'));
+  const sessionCookie = cookie(finished).split('; moston_oauth=')[0];
+  const cookies = view + '; ' + sessionCookie;
+  const loaded = await handler(request('/api/admin', { cookies }), env);
+  assert.equal(loaded.status, 200);
+  const data = await loaded.json();
+  assert.equal(data.user.name, 'Named Pharmacist');
+  assert.equal(data.content.revision, sha);
+  assert.ok(!JSON.stringify(data).includes('ghu_FICTIONAL'));
+  const updated = structuredClone(data.content);
+  updated.prices[0].price += 1;
+  assert.equal(
+    (
+      await handler(
+        request('/api/content', {
+          method: 'POST',
+          cookies,
+          data: updated,
+          csrf: 'wrong',
+        }),
+        env,
+      )
+    ).status,
+    403,
+  );
+  const saved = await handler(
+    request('/api/content', {
+      method: 'POST',
+      cookies,
+      data: updated,
+      csrf: data.csrf,
+    }),
+    env,
+  );
+  assert.equal(saved.status, 200);
+  assert.equal(current.prices[0].price, updated.prices[0].price);
+  assert.equal(
+    (
+      await handler(
+        request('/api/content', {
+          method: 'POST',
+          cookies,
+          data: updated,
+          csrf: data.csrf,
+        }),
+        env,
+      )
+    ).status,
+    409,
+  );
+  push = false;
+  assert.equal(
+    (await handler(request('/api/admin', { cookies }), env)).status,
+    403,
+  );
+  push = true;
+  env.GITHUB_EDITORS = 'another-person';
+  assert.equal(
+    (await handler(request('/api/admin', { cookies }), env)).status,
+    403,
+  );
+});
+
+test('static build excludes drafts and secrets; real local editor rebuilds with conflict protection', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'moston-static-test-'));
+  const file = join(dir, 'site-content.json'),
+    output = join(dir, 'dist');
+  let app;
+  try {
+    const data = structuredClone(sourceContent);
+    data.news.push({
+      id: 'private-draft',
+      title: 'SECRET DRAFT TITLE',
+      date: '2026-10-21',
+      body: 'Draft only',
+      published: false,
+    });
+    await writeFile(file, JSON.stringify(data));
+    await buildSite({ contentFile: file, output });
+    const html = await readFile(join(output, 'index.html'), 'utf8');
+    assert.ok(!html.includes('SECRET DRAFT TITLE'));
+    assert.ok(html.includes('Lymphoedema'));
+    const contact = await readFile(join(output, 'contact/index.html'), 'utf8');
+    assert.ok(!contact.includes('__FORM_CSRF__'));
+    assert.match(contact, /basicOnly/);
+    assert.match(
+      await readFile(join(output, 'prescriptions/index.html'), 'utf8'),
+      /mailto:pharmacy.fma50@nhs.net/,
+    );
+    const assetFiles = await readdir(output);
+    assert.ok(!assetFiles.includes('_routes.json'));
+    assert.ok(!assetFiles.includes('_worker.js'));
+    assert.ok(!(await readdir(output)).includes('content'));
+    const env = {
+      APP_MODE: 'demo',
+      MAIL_MODE: 'preview',
+      PREVIEW_ENABLED: 'true',
+      PREVIEW_PASSWORD: random(),
+      SESSION_SECRET: random(),
+      LOCAL_EDITOR: 'true',
+      LOCAL_STAFF_PASSWORD: random(),
     };
-    assert.equal((await post('/api/forms/contact', { ...form, email: 'bad' })).status, 400);
-    assert.equal((await post('/api/forms/contact', { ...form, csrf: 'bad' })).status, 403);
-    assert.equal((await post('/api/forms/contact', form)).status, 200);
-    assert.equal((await post('/api/forms/contact', form)).status, 200);
-    assert.equal(app.store.db.prepare('SELECT COUNT(*) AS n FROM outbox').get().n, 1);
-    const row = app.store.db.prepare('SELECT * FROM outbox').get();
-    assert.equal(row.state, 'preview');
-    assert.ok(!row.payload.includes('Fictional'));
-    assert.equal(app.store.decrypt(row.payload).name, 'Fictional Person');
-    assert.equal(app.store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1);
-    const phtml = await (await request('/prescriptions')).text();
-    const pform = {
-      csrf: /name="csrf" value="([a-f0-9]+)"/.exec(phtml)[1],
-      submissionId: /name="submissionId" value="([a-f0-9]+)"/.exec(phtml)[1],
-      title: 'Ms',
-      firstName: 'Fictional',
-      lastName: 'Patient',
-      dob: '1990-01-01',
-      address: 'Fictional address',
-      postcode: 'CW11 3PA',
-      phone: '01234567890',
-      email: 'fictional@example.com',
-      doctor: 'Test Doctor',
-      surgery: 'Test Surgery',
-      surgeryPostcode: 'CW11 3PA',
-    };
-    assert.equal((await post('/api/forms/prescription', pform)).status, 400);
+    app = await createLocal({
+      port: 0,
+      settings: env,
+      contentFile: file,
+      output,
+    });
+    const send = async (
+      path,
+      { method = 'GET', data, cookies = '', csrf } = {},
+    ) =>
+      fetch(app.origin + path, {
+        method,
+        redirect: 'manual',
+        headers: {
+          Cookie: cookies,
+          ...(method === 'POST'
+            ? { Origin: app.origin, 'Content-Type': 'application/json' }
+            : {}),
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+        },
+        ...(data ? { body: JSON.stringify(data) } : {}),
+      });
+    const view = await send('/preview', {
+      method: 'POST',
+      data: { password: env.PREVIEW_PASSWORD },
+    });
+    assert.equal(view.status, 303);
+    const viewing = cookie(view);
+    const logged = await send('/api/login', {
+      method: 'POST',
+      cookies: viewing,
+      data: { password: env.LOCAL_STAFF_PASSWORD },
+    });
+    assert.equal(logged.status, 200);
+    const cookies = viewing + '; ' + cookie(logged);
+    const state = await (await send('/api/admin', { cookies })).json();
+    assert.equal(state.user.name, 'Matthew (local demo)');
+    const updated = state.content;
+    updated.prices[0].price = 222.22;
     assert.equal(
-      (await post('/api/forms/prescription', { ...pform, authorisation: 'yes' })).status,
+      (
+        await send('/api/content', {
+          method: 'POST',
+          cookies,
+          csrf: state.csrf,
+          data: updated,
+        })
+      ).status,
       200,
     );
-    app.store.db.prepare('UPDATE outbox SET created=?').run(Date.now() - 8 * 86400000);
-    await app.flush();
-    assert.equal(
-      app.store.db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE payload IS NOT NULL').get().n,
-      0,
+    assert.match(
+      await (await send('/weight-management', { cookies })).text(),
+      /£222.22/,
     );
-    assert.equal((await post('/api/logout', {}, headers)).status, 200);
-    assert.equal((await request('/api/admin', { headers: { Cookie: cookie } })).status, 401);
-    const snapshot = join(directory, 'snapshot.sqlite');
-    await backup(app.store.db, snapshot);
-    const restored = new DatabaseSync(snapshot);
     assert.equal(
-      JSON.parse(restored.prepare('SELECT body FROM content').get().body).prices[0].price,
-      201.25,
+      (
+        await send('/api/content', {
+          method: 'POST',
+          cookies,
+          csrf: state.csrf,
+          data: updated,
+        })
+      ).status,
+      409,
     );
-    assert.equal(restored.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
-    restored.close();
+    const form = await (await send('/api/form-config', { cookies })).json();
+    const response = await send('/api/forms/contact', {
+      method: 'POST',
+      cookies,
+      data: {
+        name: 'Fictional',
+        email: 'fictional@example.com',
+        phone: '',
+        message: 'Opening hours?',
+        basicOnly: 'yes',
+        website: '',
+        csrf: form.csrf,
+        submissionId: form.submissionId,
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.match(
+      (await response.json()).message,
+      /Nothing has been emailed or stored/,
+    );
+    assert.ok(!(await readFile(file, 'utf8')).includes('Opening hours?'));
   } finally {
-    await new Promise((resolve) => app.server.close(resolve));
-    app.close();
-    assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep + 'moston-test-'));
-    rmSync(directory, { recursive: true, force: true });
+    if (app) await app.close();
+    const target = resolve(dir);
+    assert.ok(target.startsWith(resolve(tmpdir()) + requireSeparator()));
+    assert.match(target, /moston-static-test-/);
+    await rm(target, { recursive: true, force: true });
   }
 });
-test('email test routing, durable retries, provider acceptance and deduplication window', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'moston-test-'));
-  const before = { ...process.env };
-  Object.assign(process.env, {
-    RESEND_API_KEY: 'fake-unit-test-key',
-    MAIL_FROM: 'test@example.com',
-    TEST_EMAIL: 'fictional-recipient@example.com',
-  });
-  let attempts = 0;
-  const sent = [];
-  const app = createApp({
-    directory,
-    key: randomBytes(32),
-    mode: 'test',
-    mailMode: 'resend',
-    deliveryFetch: async (url, request) => {
-      attempts++;
-      sent.push(JSON.parse(request.body));
-      return attempts === 1
-        ? new Response('{}', { status: 503 })
-        : new Response('{"id":"fake-provider-id"}', { status: 200 });
-    },
-  });
-  try {
-    app.store.db
-      .prepare('INSERT INTO outbox(id,kind,payload,state,created,next_attempt) VALUES(?,?,?,?,?,?)')
-      .run(
-        'test-id',
-        'contact',
-        app.store.encrypt({ email: 'fictional@example.com', message: 'Fictional test' }),
-        'pending',
-        Date.now(),
-        Date.now(),
-      );
-    await app.flush();
-    let row = app.store.db.prepare('SELECT * FROM outbox').get();
-    assert.equal(row.state, 'pending');
-    assert.equal(row.attempts, 1);
-    assert.ok(row.payload);
-    assert.ok(row.next_attempt > Date.now());
-    app.store.db.prepare('UPDATE outbox SET next_attempt=0').run();
-    await app.flush();
-    row = app.store.db.prepare('SELECT * FROM outbox').get();
-    assert.equal(row.state, 'accepted');
-    assert.equal(row.payload, null);
-    assert.equal(row.provider_id, 'fake-provider-id');
-    assert.deepEqual(sent[0].to, ['fictional-recipient@example.com']);
-    assert.ok(sent[0].subject.startsWith('[TEST]'));
-    await app.flush();
-    assert.equal(attempts, 2);
-    app.store.db
-      .prepare('INSERT INTO outbox(id,kind,payload,state,created,next_attempt) VALUES(?,?,?,?,?,?)')
-      .run(
-        'old-test',
-        'contact',
-        app.store.encrypt({ email: 'fictional@example.com' }),
-        'pending',
-        Date.now() - 24 * 3600000,
-        0,
-      );
-    await app.flush();
-    assert.equal(
-      app.store.db.prepare('SELECT state FROM outbox WHERE id=?').get('old-test').state,
-      'needs-review',
-    );
-    assert.equal(attempts, 2);
-  } finally {
-    app.close();
-    for (const key of ['RESEND_API_KEY', 'MAIL_FROM', 'TEST_EMAIL']) {
-      if (before[key] === undefined) delete process.env[key];
-      else process.env[key] = before[key];
-    }
-    assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep + 'moston-test-'));
-    rmSync(directory, { recursive: true, force: true });
-  }
+function requireSeparator() {
+  return process.platform === 'win32' ? '\\' : '/';
+}
+
+test('content validation rejects invalid prices, dates and duplicate IDs', () => {
+  const data = { ...structuredClone(sourceContent), revision: 1 };
+  data.prices[0].price = -1;
+  assert.throws(() => validateContent(data));
+  data.prices[0].price = 10;
+  data.news[0].date = '2026-02-31';
+  assert.throws(() => validateContent(data));
 });

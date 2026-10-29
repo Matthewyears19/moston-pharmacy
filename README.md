@@ -1,63 +1,70 @@
-# Moston Pharmacy
+# Moston Pharmacy — Cloudflare Workers
 
-A working local demonstration of the refined website, named staff sign-in, price/news editor and custom form backend. Not deployed. No external email service has been configured or tested yet.
+Active working copy: `C:/Users/matth/Documents/git/Pharmacy_project/Website`.
 
-## Open the demonstration
+Static HTML pages plus one Cloudflare Worker handle the password-protected preview, named GitHub staff editor and basic-enquiry email. No website database or always-running hosted Node process is required. Email sending remains disabled.
 
-Use Node.js 24.13 or later in the 24.x line. From this folder:
+## Local preview
+
+Use Node 24.x and pnpm 11.25:
 
 ```powershell
-node --env-file-if-exists=.env app/server.js
+pnpm install --frozen-lockfile
+pnpm setup
+pnpm start
 ```
 
-Open http://127.0.0.1:4173. The staff editor is at http://127.0.0.1:4173/admin. Your generated local-only login is saved in `data/demo-access.txt`. It is deliberately excluded from Git and never served by the website. Do not deploy this database or these credentials.
+Open http://127.0.0.1:4173. Viewing password: `data/preview-access.txt`. Separate local editor password: `data/demo-access.txt`. Setup preserves current settings; no password rotation is needed for the Workers conversion. The loopback-only local editor writes `content/site-content.json` and rebuilds pages immediately. Hosted staff use approved named GitHub accounts.
 
-If the preview is already running, simply open its address. To stop a foreground server use Ctrl+C. Restart after changing server/template code; CSS and browser JavaScript changes need a browser refresh.
+The local demonstration neither stores nor emails enquiries. Sensitive/prescription enquiries use the visitor's email app addressed to pharmacy.fma50@nhs.net. Restart the preview after changing source code; Ctrl+C stops it.
 
-## Demo walkthrough
+## Build and validate
 
-1. Show Home → Weight management → Treatment prices.
-2. Sign in to the staff area. Change a price and save. Refresh the public price page to see the update; restore the original afterwards.
-3. Add a news article. Leave Published unchecked to keep it private, then publish it when ready. Dates label articles; they do not schedule publication.
-4. Submit an enquiry or prescription registration using fictional details. The confirmation explicitly says no email has been sent in demonstration mode.
-5. The staff editor shows queue status and who last changed website content. It does not expose patient information.
+```powershell
+pnpm build
+pnpm test
+pnpm deploy:check
+```
 
-## What changed
+- `dist/`: approved HTML, styles, JavaScript and image assets only.
+- `build/worker.mjs`: bundled server code, outside the public asset directory.
+- `wrangler.toml`: Worker entry point, assets binding and security-sensitive routing settings.
 
-- A shared layout, consistent green/cream design, responsive navigation and accessible labelled forms.
-- Completed prescription registration, contact, directions, weight management and existing Pharmacy First information.
-- Confirmed contact/address/accessibility information; removed Instagram and Formspree.
-- Local Moston consultations/follow-up with prescriptions supplied through PharmaDoctor.
-- September prices where available, with other supplied prices retained. Both original news announcements retained with spelling corrections.
-- Pharmacist-provided paragraphs and FAQs retained verbatim where used. The obsolete paragraph promising pre-September prices is omitted because the owner selected September prices. The embedded Bing redirect and “see attached document” editing instruction are omitted. See the launch checklist for clinical/publication review.
-- Shared data, SQL persistence, named accounts, change history and protection against overwriting another editor’s changes.
-- Routes for previous HTML paths redirect to the new pages. The unfinished team page redirects to Contact. The old-provider domain still requires action by that provider.
-- Google Maps now opens through a directions link rather than an embedded third-party map. No analytics or advertising cookies are added.
+Wrangler's dry-run validates packaging without deploying. Tests include Cloudflare's actual local workerd runtime and asset router, plus local content editing and mocked GitHub/Turnstile/Resend flows. Real accounts and inbox delivery still need deployment checks.
 
-The original website is preserved in `../archive/original-website`. The two source documents are unchanged. The original review is historical; use CLIENT-CHECKLIST.md for current decisions.
+For direct Workers runtime inspection, `pnpm dev:workers` builds and starts Wrangler on http://127.0.0.1:4174. It uses ignored local `.dev.vars`; the GitHub editor is unavailable until configured, whereas `pnpm start` provides the separate local file editor. No local database is needed.
+
+## Deployment
+
+Use **Workers**, matching the setup screen with a Deploy command. In Workers Builds:
+
+| Setting             | Value                                                                       |
+| ------------------- | --------------------------------------------------------------------------- |
+| Worker/project name | `moston-pharmacy`                                                           |
+| Repository          | `Matthewyears19/Website`                                                    |
+| Production branch   | `website_prototype`                                                         |
+| Root/path           | `/`                                                                         |
+| Build command       | `pnpm install --frozen-lockfile && pnpm build`                              |
+| Deploy command      | `pnpm exec wrangler deploy`                                                 |
+| Preview command     | `pnpm exec wrangler preview` (leave automatic preview builds off initially) |
+
+The generic address is `https://moston-pharmacy.YOUR-ACCOUNT-SUBDOMAIN.workers.dev`, not a pages.dev address. Use the actual assigned URL for SITE_ORIGIN. Build variables and runtime settings are separate: see HOSTING.md for all values and where to put them. The first deployment fails closed until runtime secrets and origin are configured.
+
+`pnpm deploy` performs a real deployment using existing build output and needs Cloudflare authentication. Do not run it merely to test. Never upload the whole project as public assets or use plain static hosting for a protected preview.
 
 ## Code map
 
-| Location | Purpose |
-|---|---|
-| `app/config.js` | One place for business details and initial price/news data |
-| `app/pages.js` | Shared page layout and page content |
-| `app/server.js` | HTTP routes, sessions, security headers, enquiry queue and email delivery |
-| `app/store.js` | SQL tables, password hashing, encryption and content transactions |
-| `app/validation.js` | Server-side form and content validation |
-| `app/accounts.js` | Provision, reset and disable named staff accounts |
-| `app/backup.js` | Consistent SQL snapshot |
-| `content/` | Extracted pharmacist source and retained Pharmacy First content |
-| `public/` | Browser CSS, JavaScript and optimised images |
-| `tests/` | Backend regression checks with fictional data |
-| `data/` | Private runtime database, local encryption key and demo login; never public |
+| Path                        | Purpose                                                |
+| --------------------------- | ------------------------------------------------------ |
+| `content/site-content.json` | Editable prices/news                                   |
+| `app/pages.js`, `public/`   | Shared page design and browser code                    |
+| `scripts/build.js`          | Generates HTML and a separate Worker bundle            |
+| `scripts/dev.js`            | Loopback-only local editor                             |
+| `edge/worker.js`            | Password gate, API routing and protected asset routing |
+| `edge/editor.js`            | GitHub App authentication and content commits          |
+| `edge/enquiry.js`           | Turnstile validation and direct Resend forwarding      |
+| `HOSTING.md`                | Workers setup and troubleshooting                      |
+| `BACKEND.md`                | Architecture and operational limits                    |
+| `CLIENT-CHECKLIST.md`       | Pharmacy decisions and handover tasks                  |
 
-No package install is needed. This keeps the local demonstration small. The bundled Node SQLite API is version-sensitive; review its support/stability when finalising production hosting. This is a single-server implementation, not a multi-instance or serverless deployment.
-
-## Verify
-
-```powershell
-node --test tests/*.test.js
-```
-
-Read BACKEND.md for the operational design and CLIENT-CHECKLIST.md for the remaining launch inputs. Do not upload this project as a static GitHub Pages site: it now needs a running backend and persistent storage.
+Old root HTML files are historical source and are excluded from deployment. The MySQL implementation is preserved outside the active project at `C:/Users/matth/Documents/Pharmacy/archive/mysql-backend-2026-10-21`; its data has not been deleted. Current local settings are in ignored `.dev.vars`; the old `.env` is unused. The Workers conversion has not pushed to GitHub, published a deployment or changed DNS.

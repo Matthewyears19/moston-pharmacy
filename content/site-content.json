@@ -1,0 +1,128 @@
+{
+  "prices": [
+    {
+      "id": "m0",
+      "product": "Mounjaro",
+      "dose": "2.5 mg",
+      "price": 199
+    },
+    {
+      "id": "m1",
+      "product": "Mounjaro",
+      "dose": "5 mg",
+      "price": 259
+    },
+    {
+      "id": "m2",
+      "product": "Mounjaro",
+      "dose": "7.5 mg",
+      "price": 349
+    },
+    {
+      "id": "m3",
+      "product": "Mounjaro",
+      "dose": "10 mg",
+      "price": 349
+    },
+    {
+      "id": "m4",
+      "product": "Mounjaro",
+      "dose": "12.5 mg",
+      "price": 415
+    },
+    {
+      "id": "m5",
+      "product": "Mounjaro",
+      "dose": "15 mg",
+      "price": 415
+    },
+    {
+      "id": "w0",
+      "product": "Wegovy",
+      "dose": "0.25 mg",
+      "price": 149
+    },
+    {
+      "id": "w1",
+      "product": "Wegovy",
+      "dose": "0.5 mg",
+      "price": 179
+    },
+    {
+      "id": "w2",
+      "product": "Wegovy",
+      "dose": "1 mg",
+      "price": 179
+    },
+    {
+      "id": "w3",
+      "product": "Wegovy",
+      "dose": "1.7 mg",
+      "price": 195
+    },
+    {
+      "id": "w4",
+      "product": "Wegovy",
+      "dose": "2.4 mg",
+      "price": 259
+    },
+    {
+      "id": "o0",
+      "product": "Ozempic",
+      "dose": "0.25 mg",
+      "price": 149
+    },
+    {
+      "id": "o1",
+      "product": "Ozempic",
+      "dose": "0.5 mg",
+      "price": 179
+    },
+    {
+      "id": "o2",
+      "product": "Ozempic",
+      "dose": "1 mg",
+      "price": 199
+    },
+    {
+      "id": "x28",
+      "product": "Xenical",
+      "dose": "28 days",
+      "price": 60
+    },
+    {
+      "id": "x84",
+      "product": "Xenical",
+      "dose": "84 days",
+      "price": 160
+    },
+    {
+      "id": "or28",
+      "product": "Orlistat",
+      "dose": "28 days",
+      "price": 50
+    },
+    {
+      "id": "or84",
+      "product": "Orlistat",
+      "dose": "84 days",
+      "price": 120
+    }
+  ],
+  "news": [
+    {
+      "id": "weight-launch",
+      "date": "2025-08-01",
+      "title": "Weight Loss and Management Service Launched",
+      "body": "We are introducing an exciting and promising treatment and support to guide patients within the community to a healthier life.",
+      "published": true
+    },
+    {
+      "id": "contraception",
+      "date": "2025-09-01",
+      "title": "Pharmacy First - Contraception",
+      "body": "Introducing NHS backed treatments for emergency contraception, with full anonymity with our discreet service.",
+      "published": true
+    }
+  ]
+}
