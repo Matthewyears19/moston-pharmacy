@@ -39,6 +39,10 @@ The form gets a short-lived signed/encrypted request ticket. The function checks
 
 Resend receives a fixed server-controlled recipient and the visitor's address as Reply-To. An idempotency key is reused when retrying the unchanged message on the same page, within the ticket's one-hour life. Changing the message obtains a new ticket; refreshing the page also creates a new request and may duplicate an earlier message. A timeout can mean acceptance is unknown. Nothing will be retried automatically after the visitor leaves.
 
+After the enquiry is accepted, a separate acknowledgement is sent without repeating the message, name, email address or telephone number. Test mode routes both emails to TEST_EMAIL (default `pharmacy.testing19@gmail.com`); live mode forwards to the NHS pharmacy inbox and acknowledges the visitor. No test copy is sent in live mode. The acknowledgement uses its own stable idempotency key so an unchanged retry can recover from a partial send without duplicating an accepted email. A failed acknowledgement is reported separately from a failed enquiry. Callback requests require a telephone number and are marked in the forwarded enquiry; they do not book an appointment.
+
+The contact and privacy pages link to [NHS England's explanation of confidential patient information](https://digital.nhs.uk/services/national-data-opt-out/understanding-the-national-data-opt-out/confidential-patient-information). They distinguish general contact details (still personal information) from identifiable health or treatment details, which must be discussed directly with the pharmacy rather than entered in this form.
+
 An accepted response means Resend accepted the request, not that the email arrived. Failures are shown with phone/email alternatives. Provider delivery/bounce checks belong in Resend; there is no database queue dashboard now.
 
 ## Hosting and expected cost

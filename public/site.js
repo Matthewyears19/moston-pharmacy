@@ -23,6 +23,15 @@ async function prepareForm(form) {
   const button = form.querySelector('button[type="submit"]'),
     status = form.querySelector('[role="status"]');
   let widget, config, sentFingerprint;
+  const callback = form.elements.callback;
+  if (callback) {
+    const updatePhone = () => {
+      form.elements.phone.required = callback.checked;
+    };
+    callback.addEventListener('change', updatePhone);
+    form.addEventListener('reset', () => { form.elements.phone.required = false; });
+    updatePhone();
+  }
   const initialise = async () => {
     const response = await fetch('/api/form-config');
     config = await response.json();
@@ -68,7 +77,7 @@ async function prepareForm(form) {
     try {
       const details = new FormData(form);
       const fingerprint = JSON.stringify(
-        ['name', 'email', 'phone', 'message'].map((key) => details.get(key)),
+        ['name', 'email', 'phone', 'message', 'callback'].map((key) => details.get(key)),
       );
       if (sentFingerprint && sentFingerprint !== fingerprint)
         await initialise();
@@ -77,7 +86,7 @@ async function prepareForm(form) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams(new FormData(form)),
-        signal: AbortSignal.timeout(25000),
+        signal: AbortSignal.timeout(40000),
       });
       const result = await response.json();
       if (!response.ok)

@@ -81,10 +81,12 @@ export async function enquiry(request, env, data) {
       503,
     );
   const recipient =
-    env.APP_MODE === 'live' ? 'pharmacy.fma50@nhs.net' : env.TEST_EMAIL;
+    env.APP_MODE === 'live'
+      ? 'pharmacy.fma50@nhs.net'
+      : (env.TEST_EMAIL || 'pharmacy.testing19@gmail.com');
   if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
     fail('Test recipient is not configured.', 503);
-  const text = `Basic website enquiry\n\nName: ${validated.name}\nEmail: ${validated.email}\nPhone: ${validated.phone || 'Not provided'}\n\n${validated.message}`;
+  const text = `General website enquiry\n\nName: ${validated.name}\nEmail: ${validated.email}\nPhone: ${validated.phone || 'Not provided'}\nCallback requested: ${validated.callback ? 'Yes' : 'No'}\n\n${validated.message}`;
   let response;
   try {
     response = await transport(env)('https://api.resend.com/emails', {
@@ -116,10 +118,36 @@ export async function enquiry(request, env, data) {
         : 'The email service could not accept your enquiry. Please retry or phone/email the pharmacy; nothing is queued for later sending.',
       503,
     );
+  const confirmationRecipient = env.APP_MODE === 'live' ? validated.email : recipient;
+  const confirmationText = `${env.APP_MODE === 'test' ? 'TEST CONFIRMATION — routed to the test inbox instead of the visitor.\n\n' : ''}Thank you for contacting Moston Pharmacy. Your general enquiry has been accepted by our email service for forwarding to the team. This acknowledgement does not confirm that staff have read it or that a service has been booked.\n\n${validated.callback ? 'You requested a callback. The team will use the telephone number you supplied; a callback time has not been booked.\n\n' : ''}For privacy, your message and contact details are not repeated here.\n\nPlease phone 01270 758779 if you need to follow up. Do not reply with medical or prescription details. For urgent medical advice use NHS 111; in an emergency call 999.`;
+  try {
+    const confirmation = await transport(env)('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + env.RESEND_API_KEY,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'enquiry-confirmation-' + ticket.id,
+      },
+      body: JSON.stringify({
+        from: env.MAIL_FROM,
+        to: [confirmationRecipient],
+        reply_to: recipient,
+        subject: 'Moston Pharmacy — enquiry acknowledgement',
+        text: confirmationText,
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!confirmation.ok) throw new Error('Confirmation not accepted');
+  } catch {
+    fail(
+      'Your enquiry was accepted by the email service, but the confirmation email could not be confirmed. You can retry the unchanged enquiry on this page to retry the confirmation, or phone the pharmacy. No automatic retry is queued.',
+      503,
+    );
+  }
   return json({
     message:
       env.APP_MODE === 'test'
-        ? 'Test enquiry accepted by the email service for the test inbox. Inbox receipt still needs checking.'
-        : 'Your enquiry was accepted by our email service. This does not confirm inbox delivery. Please phone if you need to follow up.',
+        ? 'Test enquiry and confirmation accepted by the email service for the test inbox. Inbox receipt still needs checking.'
+        : 'Your enquiry and confirmation email were accepted by our email service. Please check your inbox and spam folder. This does not confirm inbox delivery or a callback booking. Please phone if you need to follow up.',
   });
 }

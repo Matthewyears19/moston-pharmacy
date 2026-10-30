@@ -40,6 +40,7 @@ export function validateForm(kind, data) {
     "phone",
     "message",
     "basicOnly",
+    "callback",
     "csrf",
     "submissionId",
     "website",
@@ -52,10 +53,17 @@ export function validateForm(kind, data) {
     fail(
       "Please confirm this is a basic enquiry without medical or prescription information.",
     );
+  if (data.callback !== undefined && data.callback !== "yes")
+    fail("Please check the callback request.");
+  const callback = data.callback === "yes";
+  const phone = text(data.phone ?? "", "telephone", 40, callback);
+  if (callback && !/^[+\d\s().-]{6,40}$/.test(phone))
+    fail("Please enter a telephone number so we can call you back.");
   return {
     name: text(data.name, "name"),
     email: email(data.email),
-    phone: text(data.phone ?? "", "telephone", 40, false),
+    phone,
+    callback,
     message: text(data.message, "message", 3000),
   };
 }

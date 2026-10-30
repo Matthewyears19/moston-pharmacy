@@ -15,7 +15,7 @@ const values = {
   SESSION_SECRET: secret(),
   LOCAL_EDITOR: 'true',
   LOCAL_STAFF_PASSWORD: secret(),
-  TEST_EMAIL: 'matthew.years18@gmail.com',
+  TEST_EMAIL: 'pharmacy.testing19@gmail.com',
   ...previous,
 };
 writeFileSync(

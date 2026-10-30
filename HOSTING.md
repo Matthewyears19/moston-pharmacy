@@ -12,10 +12,14 @@ Keep `.dev.vars`, `.env`, data, node_modules, build and dist out of Git (already
 
 Choose Workers & Pages > Create application > connect/import GitHub repository, then select `Matthewyears19/Website`. Grant the Cloudflare GitHub integration access only to this repository.
 
+The initial Set up your application screen may not offer a branch selector. Workers initially uses the repository's default branch. After the Worker exists, open **Settings > Build (or Builds) > Branch control**, change the production branch to `website_prototype` and save. Do not change GitHub's default branch or its existing Pages publishing branch to solve this.
+
+If the initial Git-based setup fails before creating a Worker because main lacks this project configuration, return to Create application and use **Start with Hello World** to create a Worker named `moston-pharmacy`. Then connect the repository from that Worker's **Settings > Build > Connect**, select/configure the production branch there, and enter the commands below. The Hello World placeholder is replaced when the repository deployment succeeds.
+
 | Setting                          | Value                                                                            |
 | -------------------------------- | -------------------------------------------------------------------------------- |
 | Project/Worker name              | `moston-pharmacy` (matches wrangler.toml)                                        |
-| Production branch                | `website_prototype`                                                              |
+| Production branch (after creation) | Set `website_prototype` under Worker Settings > Build > Branch control |
 | Build command                    | `pnpm install --frozen-lockfile && pnpm build`                                   |
 | Deploy command                   | `pnpm exec wrangler deploy`                                                      |
 | Preview command                  | `pnpm exec wrangler preview`                                                     |
@@ -36,7 +40,7 @@ Under **Build variables and secrets**, add ordinary build variables:
 
 These are build settings only. Do not put runtime passwords/API keys in this initial build form. The deploy command uses the pinned Wrangler dependency rather than downloading an unpinned CLI. No custom Worker API token needs to be put into the website's runtime variables.
 
-Deploy, then open the Worker dashboard. A configuration error at this stage is expected because private runtime settings are still missing; pages must not open without the gate. The first deploy must successfully upload before there is a Worker to configure.
+Deploy, then open the Worker dashboard. A configuration error at this stage is expected because private runtime settings are still missing; pages must not open without the gate. If the default-branch build fails, use the Hello World creation route above to obtain a Worker whose branch settings can be configured first.
 
 ## 3. Record the workers.dev address
 
@@ -117,9 +121,24 @@ Future staff need repository write access plus inclusion in GITHUB_EDITORS. Coll
 
 Keep APP_MODE=demo and MAIL_MODE=preview until Resend setup is ready. Demo enquiries are checked without storing or emailing them.
 
-For a fictional inbox test, set runtime MAIL_MODE=resend, TEST_EMAIL=matthew.years18@gmail.com, MAIL_FROM and secret RESEND_API_KEY. Resend's onboarding@resend.dev sender can only deliver to the address owning that Resend account; use it only if that is Matthew's Gmail. Sending to other recipients needs a verified sending domain. Do not send as nhs.net without authority.
+For a fictional inbox test, configure these **runtime** settings:
+
+| Name | Value | Type |
+| --- | --- | --- |
+| APP_MODE | `test` | Text |
+| MAIL_MODE | `resend` | Text |
+| TEST_EMAIL | `pharmacy.testing19@gmail.com` | Text |
+| PREVIEW_ENABLED | `true` | Text |
+| MAIL_FROM | Your Resend-approved sender address | Text |
+| RESEND_API_KEY | Your Resend sending API key | Secret |
+
+Resend's `onboarding@resend.dev` sender can only deliver to the address owning that Resend account. To use it with this testing Gmail, the Gmail must be the registered Resend account email. Otherwise use an address on a domain verified in Resend as MAIL_FROM. A Gmail recipient does not make Gmail a verified sending domain; do not use a Gmail or nhs.net From address without the required sending-domain authority. See [Resend's test-sender restriction](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain).
 
 Set APP_MODE=test in both build and runtime, keep PREVIEW_ENABLED=true, and rebuild/redeploy. Verify actual receipt, replies, spam and error handling using fictional data. If domain verification is required, use a domain you control or recover pharmacy DNS access later.
+
+In test mode, both the enquiry and its separate acknowledgement go to TEST_EMAIL (defaulting to `pharmacy.testing19@gmail.com` if unset). Neither goes to the NHS inbox or the submitted visitor email. Check that two messages arrive, that a callback request includes its telephone number in the enquiry, and that the acknowledgement omits the original message and contact details. Try a callback without a telephone number and confirm it is rejected. In live mode, the enquiry goes only to `pharmacy.fma50@nhs.net` and the acknowledgement goes to the visitor; the testing Gmail receives no copy.
+
+Each email has a distinct, stable [Resend idempotency key](https://resend.com/docs/dashboard/emails/idempotency-keys). If forwarding fails, no acknowledgement is sent. If forwarding succeeds but the acknowledgement fails or times out, the website explains the partial result and allows an unchanged retry. Resend deduplicates accepted requests using these keys; the application does not keep an email queue or retry after the visitor leaves. Acceptance is not proof of inbox receipt.
 
 Live mode requires HTTPS, Resend, Turnstile and LAUNCH_APPROVED=yes. Keep the preview password enabled while arranging a final fictional NHS-inbox test. Only remove the gate once the pharmacy has approved launch and all content/provider checks are complete.
 
