@@ -4,7 +4,7 @@ Active working copy: `C:/Users/matth/Documents/git/Pharmacy_project/Website`.
 
 Static HTML pages plus one Cloudflare Worker handle the password-protected preview, named GitHub staff editor and basic-enquiry email. No website database or always-running hosted Node process is required. Email sending remains disabled.
 
-## Local preview
+## Local preview 
 
 Use Node 24.x and pnpm 11.25:
 
